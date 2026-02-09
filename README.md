@@ -10,13 +10,13 @@ npm install @karloscodes/lognorth-sdk
 
 ## Quick Start
 
-```typescript
-import { createLogger } from '@karloscodes/lognorth-sdk'
+```bash
+export LOGNORTH_API_KEY=your_api_key
+export LOGNORTH_URL=https://logs.yoursite.com
+```
 
-const log = createLogger({
-  apiKey: process.env.LOGNORTH_API_KEY,
-  endpoint: process.env.LOGNORTH_URL,
-})
+```typescript
+import { log } from '@karloscodes/lognorth-sdk'
 
 // Log events
 log('User signed up', { user_id: 123 })
@@ -29,15 +29,15 @@ try {
 }
 ```
 
+That's it. Logs are batched, errors are sent immediately, and everything flushes automatically on shutdown.
+
 ## Framework Middleware
 
 ### Express
 
 ```typescript
-import { createLogger } from '@karloscodes/lognorth-sdk'
+import { log } from '@karloscodes/lognorth-sdk'
 import { middleware } from '@karloscodes/lognorth-sdk/express'
-
-const log = createLogger({ apiKey: '...', endpoint: '...' })
 
 app.use(middleware(log))
 ```
@@ -45,10 +45,8 @@ app.use(middleware(log))
 ### Hono
 
 ```typescript
-import { createLogger } from '@karloscodes/lognorth-sdk'
+import { log } from '@karloscodes/lognorth-sdk'
 import { middleware } from '@karloscodes/lognorth-sdk/hono'
-
-const log = createLogger({ apiKey: '...', endpoint: '...' })
 
 app.use(middleware(log))
 ```
@@ -56,10 +54,8 @@ app.use(middleware(log))
 ### Next.js
 
 ```typescript
-import { createLogger } from '@karloscodes/lognorth-sdk'
+import { log } from '@karloscodes/lognorth-sdk'
 import { withLogger } from '@karloscodes/lognorth-sdk/next'
-
-const log = createLogger({ apiKey: '...', endpoint: '...' })
 
 export const GET = withLogger(log)(async (req) => {
   return Response.json({ ok: true })
@@ -72,25 +68,20 @@ export const GET = withLogger(log)(async (req) => {
 - **Errors** are sent immediately with 3 retries and exponential backoff
 - **Buffer limit** of 1000 events - drops oldest regular logs first, never drops errors
 - **429/503 handling** - automatically backs off when server is busy
+- **Auto-flush** on shutdown (SIGINT, SIGTERM, beforeExit)
 
-## Configuration
+## Custom Configuration
 
 ```typescript
+import { createLogger } from '@karloscodes/lognorth-sdk'
+
 const log = createLogger({
-  apiKey: string,           // Required
-  endpoint: string,         // LogNorth server URL
-  batchSize: 10,            // Events before auto-flush
-  flushInterval: 5000,      // Ms before auto-flush
-  maxBufferSize: 1000,      // Max buffered events
+  apiKey: 'custom_key',        // Default: LOGNORTH_API_KEY env
+  endpoint: 'https://...',     // Default: LOGNORTH_URL env
+  batchSize: 10,               // Events before auto-flush
+  flushInterval: 5000,         // Ms before auto-flush
+  maxBufferSize: 1000,         // Max buffered events
 })
-```
-
-## Flushing
-
-Call `flush()` before shutdown:
-
-```typescript
-await log.flush()
 ```
 
 ## License

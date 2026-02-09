@@ -1,5 +1,5 @@
 export interface LogNorthConfig {
-  apiKey: string;
+  apiKey?: string;
   endpoint?: string;
   batchSize?: number;
   flushInterval?: number;
@@ -35,8 +35,9 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-export function createLogger(config: LogNorthConfig): LogFunction {
-  const endpoint = config.endpoint || 'https://your-lognorth-instance.com';
+export function createLogger(config: LogNorthConfig = {}): LogFunction {
+  const apiKey = config.apiKey || process.env.LOGNORTH_API_KEY || '';
+  const endpoint = config.endpoint || process.env.LOGNORTH_URL || '';
   const batchSize = config.batchSize ?? 10;
   const baseFlushInterval = config.flushInterval ?? 5000;
   const maxBufferSize = config.maxBufferSize ?? 1000;
@@ -48,7 +49,7 @@ export function createLogger(config: LogNorthConfig): LogFunction {
   let backoffUntil = 0;
 
   async function send(events: Event[], retries: number = 1): Promise<boolean> {
-    if (events.length === 0) return true;
+    if (events.length === 0 || !endpoint || !apiKey) return true;
 
     // Respect backoff from previous 429
     const now = Date.now();
@@ -60,7 +61,7 @@ export function createLogger(config: LogNorthConfig): LogFunction {
       try {
         const res = await fetch(`${endpoint}/api/v1/events/batch`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.apiKey}` },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
           body: JSON.stringify({ events }),
         });
 
@@ -135,7 +136,19 @@ export function createLogger(config: LogNorthConfig): LogFunction {
   };
 
   log.flush = flush;
+
+  // Auto-flush on shutdown
+  if (typeof process !== 'undefined') {
+    const shutdown = () => { flush(); };
+    process.on('beforeExit', shutdown);
+    process.on('SIGINT', () => { flush().then(() => process.exit(0)); });
+    process.on('SIGTERM', () => { flush().then(() => process.exit(0)); });
+  }
+
   return log;
 }
 
-export default createLogger;
+// Default logger - reads from env vars automatically
+export const log = createLogger();
+
+export default log;
