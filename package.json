@@ -1,0 +1,47 @@
+{
+  "name": "@karloscodes/lognorth-sdk",
+  "version": "0.1.0",
+  "description": "Official JavaScript SDK for LogNorth - self-hosted error tracking and logging",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./express": {
+      "types": "./dist/express.d.ts",
+      "import": "./dist/express.js"
+    },
+    "./hono": {
+      "types": "./dist/hono.d.ts",
+      "import": "./dist/hono.js"
+    },
+    "./next": {
+      "types": "./dist/next.d.ts",
+      "import": "./dist/next.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "test": "npx tsx --test src/*.test.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["logging", "error-tracking"],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "express": ">=4",
+    "hono": ">=3",
+    "next": ">=13"
+  },
+  "peerDependenciesMeta": {
+    "express": { "optional": true },
+    "hono": { "optional": true },
+    "next": { "optional": true }
+  }
+}
