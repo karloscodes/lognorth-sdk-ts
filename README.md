@@ -10,20 +10,15 @@ npm install @karloscodes/lognorth-sdk
 
 ## Use
 
-```bash
-export LOGNORTH_API_KEY=your_key
-export LOGNORTH_URL=https://logs.yoursite.com
-```
-
 ```typescript
-import log from '@karloscodes/lognorth-sdk'
+import LogNorth from '@karloscodes/lognorth-sdk'
 
-log('User signed up', { user_id: 123 })
+LogNorth.config('https://logs.yoursite.com', 'your-api-key')
 
-log.error('Checkout failed', { error: err, order_id: 42 })
+LogNorth.log('User signed up', { user_id: 123 })
+
+LogNorth.error('Checkout failed', err, { order_id: 42 })
 ```
-
-That's it. Batches automatically, errors sent immediately, flushes on shutdown.
 
 ## Middleware
 
@@ -41,12 +36,11 @@ import { withLogger } from '@karloscodes/lognorth-sdk/next'
 export const GET = withLogger(handler)
 ```
 
-## Config (optional)
+## How It Works
 
-```typescript
-import { config } from '@karloscodes/lognorth-sdk'
-config({ apiKey: '...', endpoint: '...' })
-```
+- `LogNorth.log()` batches events (10 or 5s)
+- `LogNorth.error()` sends immediately
+- Auto-flushes on shutdown
 
 ## License
 

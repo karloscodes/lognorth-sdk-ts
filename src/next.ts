@@ -1,4 +1,4 @@
-import log from './index.js';
+import LogNorth from './index.js';
 
 type Handler = (req: Request) => Promise<Response> | Response;
 
@@ -9,7 +9,7 @@ export function withLogger(handler: Handler): Handler {
 
     try {
       const res = await handler(req);
-      log(`${req.method} ${url.pathname} → ${res.status}`, {
+      LogNorth.log(`${req.method} ${url.pathname} → ${res.status}`, {
         method: req.method,
         path: url.pathname,
         status: res.status,
@@ -17,8 +17,7 @@ export function withLogger(handler: Handler): Handler {
       });
       return res;
     } catch (err) {
-      log.error(`${req.method} ${url.pathname} → error`, {
-        error: err as Error,
+      LogNorth.error(`${req.method} ${url.pathname} → error`, err as Error, {
         method: req.method,
         path: url.pathname,
         duration_ms: Date.now() - start,

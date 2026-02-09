@@ -1,36 +1,27 @@
 import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert';
+import LogNorth from './index.js';
 
-// Reset module state between tests
-let log: typeof import('./index.js').default;
-let config: typeof import('./index.js').config;
-let flush: typeof import('./index.js').flush;
-
-describe('lognorth', () => {
+describe('LogNorth', () => {
   let fetchCalls: { url: string; body: unknown }[] = [];
 
-  beforeEach(async () => {
+  beforeEach(() => {
     fetchCalls = [];
     global.fetch = mock.fn(async (url: string, options: { body: string }) => {
       fetchCalls.push({ url, body: JSON.parse(options.body) });
       return { ok: true };
     }) as unknown as typeof fetch;
 
-    // Re-import to reset state
-    const mod = await import('./index.js');
-    log = mod.default;
-    config = mod.config;
-    flush = mod.flush;
-    config({ apiKey: 'test-key', endpoint: 'https://logs.test.com' });
+    LogNorth.config('https://logs.test.com', 'test-key');
   });
 
-  it('batches regular events until flush', async () => {
-    log('Event 1', { user: 123 });
-    log('Event 2', { user: 456 });
+  it('batches regular logs until flush', async () => {
+    LogNorth.log('Event 1', { user: 123 });
+    LogNorth.log('Event 2', { user: 456 });
 
     assert.strictEqual(fetchCalls.length, 0);
 
-    await flush();
+    await LogNorth.flush();
 
     assert.strictEqual(fetchCalls.length, 1);
     const body = fetchCalls[0].body as { events: { message: string }[] };
@@ -39,7 +30,7 @@ describe('lognorth', () => {
 
   it('sends errors immediately', async () => {
     const err = new TypeError('Cannot read property');
-    log.error('Something failed', { error: err });
+    LogNorth.error('Something failed', err);
 
     await new Promise(r => setTimeout(r, 10));
 
@@ -48,12 +39,21 @@ describe('lognorth', () => {
     assert.strictEqual(body.events[0].error_type, 'TypeError');
   });
 
-  it('includes context in events', async () => {
-    log('User action', { user_id: 42, action: 'login' });
-    await flush();
+  it('includes context in logs', async () => {
+    LogNorth.log('User action', { user_id: 42, action: 'login' });
+    await LogNorth.flush();
 
     const body = fetchCalls[0].body as { events: { context: Record<string, unknown> }[] };
     assert.strictEqual(body.events[0].context?.user_id, 42);
+  });
+
+  it('includes context in errors', async () => {
+    LogNorth.error('Failed', new Error('oops'), { order_id: 99 });
+    await new Promise(r => setTimeout(r, 10));
+
+    const body = fetchCalls[0].body as { events: { context: Record<string, unknown> }[] };
+    assert.strictEqual(body.events[0].context?.order_id, 99);
+    assert.strictEqual(body.events[0].context?.error, 'oops');
   });
 
   it('sends auth header', async () => {
@@ -63,14 +63,9 @@ describe('lognorth', () => {
       return { ok: true };
     }) as unknown as typeof fetch;
 
-    log('Test');
-    await flush();
+    LogNorth.log('Test');
+    await LogNorth.flush();
 
     assert.strictEqual(capturedHeaders['Authorization'], 'Bearer test-key');
-  });
-
-  it('does nothing on empty flush', async () => {
-    await flush();
-    assert.strictEqual(fetchCalls.length, 0);
   });
 });

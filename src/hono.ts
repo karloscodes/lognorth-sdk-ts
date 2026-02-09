@@ -1,4 +1,4 @@
-import log from './index.js';
+import LogNorth from './index.js';
 
 type Context = { req: { method: string; path: string }; res: { status: number } };
 type Next = () => Promise<void>;
@@ -8,11 +8,10 @@ export function middleware() {
     const start = Date.now();
     await next();
 
-    const status = c.res.status;
-    log(`${c.req.method} ${c.req.path} → ${status}`, {
+    LogNorth.log(`${c.req.method} ${c.req.path} → ${c.res.status}`, {
       method: c.req.method,
       path: c.req.path,
-      status,
+      status: c.res.status,
       duration_ms: Date.now() - start,
     });
   };

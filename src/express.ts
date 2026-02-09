@@ -1,16 +1,15 @@
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
-import log from './index.js';
+import LogNorth from './index.js';
 
 export function middleware(): RequestHandler {
   return (req: Request, res: Response, next: NextFunction) => {
     const start = Date.now();
 
     res.on('finish', () => {
-      const status = res.statusCode;
-      log(`${req.method} ${req.path} → ${status}`, {
+      LogNorth.log(`${req.method} ${req.path} → ${res.statusCode}`, {
         method: req.method,
         path: req.path,
-        status,
+        status: res.statusCode,
         duration_ms: Date.now() - start,
       });
     });
