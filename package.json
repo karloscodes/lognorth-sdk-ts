@@ -19,6 +19,10 @@
     "./next": {
       "types": "./dist/next.d.ts",
       "import": "./dist/next.js"
+    },
+    "./pino": {
+      "types": "./dist/pino.d.ts",
+      "import": "./dist/pino.js"
     }
   },
   "files": ["dist"],
@@ -37,11 +41,13 @@
   "peerDependencies": {
     "express": ">=4",
     "hono": ">=3",
-    "next": ">=13"
+    "next": ">=13",
+    "pino": ">=8"
   },
   "peerDependenciesMeta": {
     "express": { "optional": true },
     "hono": { "optional": true },
-    "next": { "optional": true }
+    "next": { "optional": true },
+    "pino": { "optional": true }
   }
 }

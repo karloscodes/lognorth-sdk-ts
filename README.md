@@ -16,7 +16,6 @@ import LogNorth from '@karloscodes/lognorth-sdk'
 LogNorth.config('https://logs.yoursite.com', 'your-api-key')
 
 LogNorth.log('User signed up', { user_id: 123 })
-
 LogNorth.error('Checkout failed', err, { order_id: 42 })
 ```
 
@@ -33,7 +32,30 @@ app.use(middleware())
 
 // Next.js
 import { withLogger } from '@karloscodes/lognorth-sdk/next'
-export const GET = withLogger(handler)
+export const GET = withLogger()(handler)
+```
+
+## With Pino
+
+Keep your existing Pino setup, add LogNorth as a transport:
+
+```typescript
+import pino from 'pino'
+import { transport } from '@karloscodes/lognorth-sdk/pino'
+
+LogNorth.config('https://logs.yoursite.com', 'your-api-key')
+
+const logger = pino({ level: 'info' }, transport())
+
+logger.info({ user_id: 123 }, 'User signed up')  // → LogNorth
+logger.error({ err }, 'Checkout failed')          // → LogNorth (immediate)
+```
+
+Middleware with your logger:
+
+```typescript
+import { middleware } from '@karloscodes/lognorth-sdk/express'
+app.use(middleware(logger))  // Uses your pino instance
 ```
 
 ## How It Works
