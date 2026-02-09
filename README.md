@@ -46,11 +46,24 @@ app.use(middleware(log))
 
 ```typescript
 import { createLogger } from '@karloscodes/lognorth-sdk'
-import { middleware } from 'lognorth/hono'
+import { middleware } from '@karloscodes/lognorth-sdk/hono'
 
 const log = createLogger({ apiKey: '...', endpoint: '...' })
 
 app.use(middleware(log))
+```
+
+### Next.js
+
+```typescript
+import { createLogger } from '@karloscodes/lognorth-sdk'
+import { withLogger } from '@karloscodes/lognorth-sdk/next'
+
+const log = createLogger({ apiKey: '...', endpoint: '...' })
+
+export const GET = withLogger(log)(async (req) => {
+  return Response.json({ ok: true })
+})
 ```
 
 ## How It Works
