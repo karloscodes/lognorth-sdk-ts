@@ -4,8 +4,10 @@ Official SDK for [LogNorth](https://lognorth.com) - self-hosted error tracking.
 
 ## Install
 
+> **Beta:** Not yet published to npm. Install directly from GitHub:
+
 ```bash
-npm install @karloscodes/lognorth-sdk
+npm install github:karloscodes/lognorth-sdk-ts
 ```
 
 ## Use
