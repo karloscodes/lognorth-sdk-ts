@@ -28,15 +28,17 @@ describe('LogNorth', () => {
     assert.strictEqual(body.events.length, 2);
   });
 
-  it('sends errors immediately', async () => {
+  it('sends errors immediately with structured fields in context', async () => {
     const err = new TypeError('Cannot read property');
     LogNorth.error('Something failed', err);
 
     await new Promise(r => setTimeout(r, 10));
 
     assert.strictEqual(fetchCalls.length, 1);
-    const body = fetchCalls[0].body as { events: { error_type: string }[] };
-    assert.strictEqual(body.events[0].error_type, 'TypeError');
+    const body = fetchCalls[0].body as { events: { context: Record<string, unknown> }[] };
+    assert.strictEqual(body.events[0].context?.error_class, 'TypeError');
+    assert.strictEqual(body.events[0].context?.error, 'Cannot read property');
+    assert.ok(body.events[0].context?.stack_trace);
   });
 
   it('includes context in logs', async () => {

@@ -1,5 +1,15 @@
 type Context = Record<string, unknown>;
-type Event = { message: string; timestamp: string; error_type?: string; context?: Context };
+
+type ErrorContext = Context & {
+  error: string;
+  error_class: string;
+  error_file: string;
+  error_line: number;
+  error_caller: string;
+  stack_trace?: string;
+};
+
+type Event = { message: string; timestamp: string; context?: Context | ErrorContext };
 
 let apiKey = '';
 let endpoint = '';
@@ -58,11 +68,33 @@ const LogNorth = {
   },
 
   error(message: string, err: Error, context?: Context): void {
+    // Parse first stack frame: "at funcName (file:line:col)" or "at file:line:col"
+    let errorFile = '';
+    let errorLine = 0;
+    let errorCaller = '';
+    if (err.stack) {
+      const match = err.stack.match(/\n\s+at\s+(?:(.+?)\s+\()?(.+?):(\d+):\d+\)?/);
+      if (match) {
+        errorCaller = match[1] || '';
+        errorFile = match[2] || '';
+        errorLine = parseInt(match[3], 10) || 0;
+      }
+    }
+
+    const errorContext: ErrorContext = {
+      ...context,
+      error: err.message,
+      error_class: err.name || 'Error',
+      error_file: errorFile,
+      error_line: errorLine,
+      error_caller: errorCaller,
+      stack_trace: err.stack,
+    };
+
     const event: Event = {
       message,
       timestamp: new Date().toISOString(),
-      error_type: err.name || 'Error',
-      context: { ...context, error: err.message, stack: err.stack },
+      context: errorContext,
     };
     send([event], true);
   },
