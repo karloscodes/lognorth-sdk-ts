@@ -1,6 +1,6 @@
-import LogNorth from './index.js';
+import { withTraceID, generateTraceID, _log } from './index.js';
 
-type Context = { req: { method: string; path: string }; res: { status: number } };
+type Context = { req: { method: string; path: string; header(name: string): string | undefined }; res: { status: number }; header(name: string, value: string): void };
 type Next = () => Promise<void>;
 
 interface Logger {
@@ -9,26 +9,29 @@ interface Logger {
 }
 
 /**
- * Hono middleware that logs requests.
- * @param logger Optional logger (pino, winston, etc). Uses LogNorth directly if not provided.
+ * Hono middleware that logs requests with trace_id propagation.
+ * All LogNorth.log/error calls within the request automatically inherit the trace_id.
  */
 export function middleware(logger?: Logger) {
   return async (c: Context, next: Next) => {
     const start = Date.now();
-    await next();
+    const traceID = c.req.header('x-trace-id') || generateTraceID();
+    c.header('X-Trace-ID', traceID);
 
-    const data = {
+    await withTraceID(traceID, () => next());
+
+    const duration_ms = Date.now() - start;
+    const context = {
       method: c.req.method,
       path: c.req.path,
       status: c.res.status,
-      duration_ms: Date.now() - start,
     };
     const msg = `${c.req.method} ${c.req.path} → ${c.res.status}`;
 
     if (logger) {
-      logger.info(data, msg);
+      logger.info({ ...context, duration_ms, trace_id: traceID }, msg);
     } else {
-      LogNorth.log(msg, data);
+      _log(msg, context, traceID, duration_ms);
     }
   };
 }

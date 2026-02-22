@@ -1,6 +1,7 @@
 import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert';
 import LogNorth from './index.js';
+import { withTraceID } from './index.js';
 
 describe('LogNorth', () => {
   let fetchCalls: { url: string; body: unknown }[] = [];
@@ -56,6 +57,16 @@ describe('LogNorth', () => {
     const body = fetchCalls[0].body as { events: { context: Record<string, unknown> }[] };
     assert.strictEqual(body.events[0].context?.order_id, 99);
     assert.strictEqual(body.events[0].context?.error, 'oops');
+  });
+
+  it('auto-attaches trace_id from AsyncLocalStorage', async () => {
+    withTraceID('abc123', () => {
+      LogNorth.log('traced event', { user_id: 1 });
+    });
+    await LogNorth.flush();
+
+    const body = fetchCalls[0].body as { events: { trace_id?: string }[] };
+    assert.strictEqual(body.events[0].trace_id, 'abc123');
   });
 
   it('sends auth header', async () => {
