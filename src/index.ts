@@ -80,13 +80,13 @@ if (typeof process !== 'undefined') {
 }
 
 // Internal: used by middleware to set duration_ms and trace_id on events
-function _log(message: string, context: Context | undefined, trace_id: string, duration_ms?: number): void {
-  buffer.push({ message, timestamp: new Date().toISOString(), duration_ms, trace_id, context });
+function _log(message: string, context: Context | undefined, trace_id: string, duration_ms?: number, timestamp?: Date): void {
+  buffer.push({ message, timestamp: (timestamp ?? new Date()).toISOString(), duration_ms, trace_id, context });
   schedule();
   if (buffer.length >= 10) flush();
 }
 
-function _error(message: string, err: Error, context: Context | undefined, trace_id: string, duration_ms?: number): void {
+function _error(message: string, err: Error, context: Context | undefined, trace_id: string, duration_ms?: number, timestamp?: Date): void {
   let errorFile = '';
   let errorLine = 0;
   let errorCaller = '';
@@ -109,7 +109,7 @@ function _error(message: string, err: Error, context: Context | undefined, trace
     stack_trace: err.stack,
   };
 
-  send([{ message, timestamp: new Date().toISOString(), duration_ms, trace_id, context: errorContext }], true);
+  send([{ message, timestamp: (timestamp ?? new Date()).toISOString(), duration_ms, trace_id, context: errorContext }], true);
 }
 
 const LogNorth = {

@@ -14,7 +14,8 @@ interface Logger {
  */
 export function middleware(logger?: Logger) {
   return async (c: Context, next: Next) => {
-    const start = Date.now();
+    const startTime = new Date();
+    const start = startTime.getTime();
     const traceID = c.req.header('x-trace-id') || generateTraceID();
     c.header('X-Trace-ID', traceID);
 
@@ -31,7 +32,7 @@ export function middleware(logger?: Logger) {
     if (logger) {
       logger.info({ ...context, duration_ms, trace_id: traceID }, msg);
     } else {
-      _log(msg, context, traceID, duration_ms);
+      _log(msg, context, traceID, duration_ms, startTime);
     }
   };
 }

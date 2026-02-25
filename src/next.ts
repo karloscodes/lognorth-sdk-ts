@@ -16,7 +16,8 @@ interface Logger {
 export function withLogger(logger?: Logger) {
   return (handler: Handler): Handler => {
     return async (req: Request) => {
-      const start = Date.now();
+      const startTime = new Date();
+      const start = startTime.getTime();
       const url = new URL(req.url);
       const traceID = req.headers.get('x-trace-id') || generateTraceID();
 
@@ -33,7 +34,7 @@ export function withLogger(logger?: Logger) {
         if (logger) {
           logger.info({ ...context, duration_ms, trace_id: traceID }, msg);
         } else {
-          _log(msg, context, traceID, duration_ms);
+          _log(msg, context, traceID, duration_ms, startTime);
         }
 
         const headers = new Headers(res.headers);
@@ -50,7 +51,7 @@ export function withLogger(logger?: Logger) {
         if (logger) {
           logger.error({ ...context, duration_ms, trace_id: traceID, err }, msg);
         } else {
-          _error(msg, err as Error, context, traceID, duration_ms);
+          _error(msg, err as Error, context, traceID, duration_ms, startTime);
         }
         throw err;
       }
