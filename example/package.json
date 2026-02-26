@@ -3,6 +3,7 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "dev": "npx tsx --watch app.ts",
     "start": "npx tsx app.ts"
   },
   "dependencies": {
