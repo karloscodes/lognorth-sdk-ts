@@ -1,0 +1,15 @@
+{
+  "name": "lognorth-express-example",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "npx tsx app.ts"
+  },
+  "dependencies": {
+    "express": "^5.0.0",
+    "@karloscodes/lognorth-sdk": "file:.."
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0"
+  }
+}
