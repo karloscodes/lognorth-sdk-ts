@@ -1,4 +1,4 @@
-import LogNorth from './index.js';
+import { _log, _error, getTraceID } from './index.js';
 import { Transform } from 'stream';
 
 /**
@@ -12,13 +12,15 @@ export function transport(): Transform {
       try {
         const log = typeof chunk === 'string' ? JSON.parse(chunk) : chunk;
         const { level, msg, time, err, error, ...context } = log;
+        const traceID = getTraceID() || '';
+        const timestamp = time ? new Date(time) : undefined;
 
         // Pino levels: 10=trace, 20=debug, 30=info, 40=warn, 50=error, 60=fatal
         if (level >= 50) {
           const e = err || error || new Error(msg);
-          LogNorth.error(msg || 'Error', e instanceof Error ? e : new Error(String(e)), context);
+          _error(msg || 'Error', e instanceof Error ? e : new Error(String(e)), context, traceID, undefined, timestamp);
         } else {
-          LogNorth.log(msg || '', context);
+          _log(msg || '', context, traceID, undefined, timestamp);
         }
       } catch {
         // Don't break the stream

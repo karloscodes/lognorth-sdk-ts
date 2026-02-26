@@ -19,6 +19,8 @@ type Event = {
   context?: Context | ErrorContext;
 };
 
+const MAX_BUFFER = 1000;
+
 function generateTraceID(): string {
   const bytes = new Uint8Array(8);
   crypto.getRandomValues(bytes);
@@ -40,6 +42,7 @@ let endpoint = '';
 let buffer: Event[] = [];
 let timer: ReturnType<typeof setTimeout> | null = null;
 let backoff = 0;
+let flushing = false;
 
 async function send(events: Event[], isError = false): Promise<void> {
   if (!events.length || !endpoint) return;
@@ -54,19 +57,29 @@ async function send(events: Event[], isError = false): Promise<void> {
 
     if (res.status === 429) {
       backoff = Date.now() + 5000;
-      if (!isError) buffer.unshift(...events);
+      requeue(events);
     }
   } catch {
-    if (isError) buffer.unshift(...events);
+    if (isError) requeue(events);
   }
 }
 
+function requeue(events: Event[]): void {
+  buffer = [...events, ...buffer].slice(0, MAX_BUFFER);
+}
+
 async function flush(): Promise<void> {
-  if (timer) { clearTimeout(timer); timer = null; }
-  if (!buffer.length) return;
-  const events = buffer;
-  buffer = [];
-  await send(events);
+  if (flushing) return;
+  flushing = true;
+  try {
+    if (timer) { clearTimeout(timer); timer = null; }
+    if (!buffer.length) return;
+    const events = buffer;
+    buffer = [];
+    await send(events);
+  } finally {
+    flushing = false;
+  }
 }
 
 function schedule(): void {
@@ -81,7 +94,11 @@ if (typeof process !== 'undefined') {
 
 // Internal: used by middleware to set duration_ms and trace_id on events
 function _log(message: string, context: Context | undefined, trace_id: string, duration_ms?: number, timestamp?: Date): void {
-  buffer.push({ message, timestamp: (timestamp ?? new Date()).toISOString(), duration_ms, trace_id, context });
+  const event: Event = { message, timestamp: (timestamp ?? new Date()).toISOString(), context };
+  if (trace_id) event.trace_id = trace_id;
+  if (duration_ms !== undefined) event.duration_ms = duration_ms;
+  buffer.push(event);
+  if (buffer.length > MAX_BUFFER) buffer = buffer.slice(-MAX_BUFFER);
   schedule();
   if (buffer.length >= 10) flush();
 }
@@ -109,7 +126,10 @@ function _error(message: string, err: Error, context: Context | undefined, trace
     stack_trace: err.stack,
   };
 
-  send([{ message, timestamp: (timestamp ?? new Date()).toISOString(), duration_ms, trace_id, context: errorContext }], true);
+  const event: Event = { message, timestamp: (timestamp ?? new Date()).toISOString(), context: errorContext };
+  if (trace_id) event.trace_id = trace_id;
+  if (duration_ms !== undefined) event.duration_ms = duration_ms;
+  send([event], true);
 }
 
 const LogNorth = {
@@ -119,15 +139,15 @@ const LogNorth = {
   },
 
   log(message: string, context?: Context): void {
-    _log(message, context, getTraceID() || '');
+    _log(message, context, getTraceID() ?? '');
   },
 
   error(message: string, err: Error, context?: Context): void {
-    _error(message, err, context, getTraceID() || '');
+    _error(message, err, context, getTraceID() ?? '');
   },
 
   flush,
 };
 
 export default LogNorth;
-export { LogNorth, withTraceID, generateTraceID, _log, _error };
+export { LogNorth, withTraceID, generateTraceID, getTraceID, _log, _error };
