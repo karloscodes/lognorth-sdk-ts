@@ -29,6 +29,7 @@
   "scripts": {
     "build": "tsc",
     "test": "npx tsx --test src/*.test.ts",
+    "prepare": "npm run build",
     "prepublishOnly": "npm run build"
   },
   "keywords": ["logging", "error-tracking"],
