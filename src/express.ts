@@ -52,6 +52,11 @@ export function middleware(options?: MiddlewareOptions | Logger): RequestHandler
     res.setHeader?.('X-Trace-ID', traceID);
 
     res.on('finish', () => {
+      // Don't track requests that didn't match any route (scanner noise)
+      if (res.statusCode === 404 && !req.route) {
+        return;
+      }
+
       const duration_ms = Date.now() - start;
       const context = {
         method: req.method,

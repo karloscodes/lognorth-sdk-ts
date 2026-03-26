@@ -35,6 +35,34 @@ describe('express middleware', () => {
     assert.strictEqual(body.events[0].context?.duration_ms, undefined);
   });
 
+  it('skips route miss 404', async () => {
+    const mw = middleware();
+    const req = { method: 'GET', path: '/.env', headers: {} };
+    const res = Object.assign(new EventEmitter(), { statusCode: 404, setHeader: mock.fn() });
+    const next = mock.fn();
+
+    mw(req as any, res as any, next);
+    res.emit('finish');
+    await LogNorth.flush();
+
+    assert.strictEqual(fetchCalls.length, 0);
+  });
+
+  it('tracks controller 404 when route matched', async () => {
+    const mw = middleware();
+    const req = { method: 'GET', path: '/users/999', headers: {}, route: { path: '/users/:id' } };
+    const res = Object.assign(new EventEmitter(), { statusCode: 404, setHeader: mock.fn() });
+    const next = mock.fn();
+
+    mw(req as any, res as any, next);
+    res.emit('finish');
+    await LogNorth.flush();
+
+    assert.strictEqual(fetchCalls.length, 1);
+    const body = fetchCalls[0].body as { events: { message: string }[] };
+    assert.strictEqual(body.events[0].message, 'GET /users/999 → 404');
+  });
+
   it('uses incoming X-Trace-ID header', async () => {
     const mw = middleware();
     const req = { method: 'POST', path: '/api', headers: { 'x-trace-id': 'incoming-123' } };
