@@ -81,4 +81,44 @@ describe('LogNorth', () => {
 
     assert.strictEqual(capturedHeaders['Authorization'], 'Bearer test-key');
   });
+
+  it('stamps environment on every event', async () => {
+    LogNorth.config('https://logs.test.com', 'test-key', { environment: 'staging' });
+
+    LogNorth.log('hello');
+    await LogNorth.flush();
+    const logBody = fetchCalls[0].body as { events: { context?: Record<string, unknown> }[] };
+    assert.strictEqual(logBody.events[0].context?.environment, 'staging');
+
+    fetchCalls = [];
+    LogNorth.error('crash', new Error('boom'));
+    await new Promise(r => setTimeout(r, 10));
+    const errBody = fetchCalls[0].body as { events: { context?: Record<string, unknown> }[] };
+    assert.strictEqual(errBody.events[0].context?.environment, 'staging');
+  });
+
+  it('skips sending in test/development by default and sends in staging/production/preview', async () => {
+    for (const env of ['test', 'development']) {
+      fetchCalls = [];
+      LogNorth.config('https://logs.test.com', 'test-key', { environment: env });
+      LogNorth.log('dropped');
+      await LogNorth.flush();
+      assert.strictEqual(fetchCalls.length, 0, `expected no send in ${env}`);
+    }
+
+    for (const env of ['staging', 'preview', 'qa', 'production']) {
+      fetchCalls = [];
+      LogNorth.config('https://logs.test.com', 'test-key', { environment: env });
+      LogNorth.log('sent');
+      await LogNorth.flush();
+      assert.strictEqual(fetchCalls.length, 1, `expected send in ${env}`);
+    }
+  });
+
+  it('explicit enabled overrides the env-based default', async () => {
+    LogNorth.config('https://logs.test.com', 'test-key', { environment: 'development', enabled: true });
+    LogNorth.log('forced on');
+    await LogNorth.flush();
+    assert.strictEqual(fetchCalls.length, 1);
+  });
 });

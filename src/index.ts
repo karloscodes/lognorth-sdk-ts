@@ -39,10 +39,17 @@ function getTraceID(): string | undefined {
 
 let apiKey = '';
 let endpoint = '';
+let environment = '';
+let enabled = true;
 let buffer: Event[] = [];
 let timer: ReturnType<typeof setTimeout> | null = null;
 let backoff = 0;
 let flushing = false;
+
+function stampEnvironment(context: Context | undefined): Context | undefined {
+  if (!environment) return context;
+  return { ...(context ?? {}), environment };
+}
 
 async function send(events: Event[], isError = false): Promise<void> {
   if (!events.length || !endpoint) return;
@@ -94,7 +101,8 @@ if (typeof process !== 'undefined') {
 
 // Internal: used by middleware to set duration_ms and trace_id on events
 function _log(message: string, context: Context | undefined, trace_id: string, duration_ms?: number, timestamp?: Date): void {
-  const event: Event = { message, timestamp: (timestamp ?? new Date()).toISOString(), context };
+  if (!enabled) return;
+  const event: Event = { message, timestamp: (timestamp ?? new Date()).toISOString(), context: stampEnvironment(context) };
   if (trace_id) event.trace_id = trace_id;
   if (duration_ms !== undefined) event.duration_ms = duration_ms;
   buffer.push(event);
@@ -104,6 +112,7 @@ function _log(message: string, context: Context | undefined, trace_id: string, d
 }
 
 function _error(message: string, err: Error, context: Context | undefined, trace_id: string, duration_ms?: number, timestamp?: Date): void {
+  if (!enabled) return;
   let errorFile = '';
   let errorLine = 0;
   let errorCaller = '';
@@ -118,6 +127,7 @@ function _error(message: string, err: Error, context: Context | undefined, trace
 
   const errorContext: ErrorContext = {
     ...context,
+    ...(environment ? { environment } : {}),
     error: err.message,
     error_class: err.name || 'Error',
     error_file: errorFile,
@@ -132,10 +142,22 @@ function _error(message: string, err: Error, context: Context | undefined, trace
   send([event], true);
 }
 
+interface ConfigOptions {
+  /** Environment label stamped on every event (e.g. "production", "staging"). Defaults to NODE_ENV. */
+  environment?: string;
+  /** Override the auto-disable in test/development. */
+  enabled?: boolean;
+}
+
 const LogNorth = {
-  config(url: string, key: string): void {
+  config(url: string, key: string, options: ConfigOptions = {}): void {
     endpoint = url;
     apiKey = key;
+    const nodeEnv = typeof process !== 'undefined' ? (process.env?.NODE_ENV ?? '') : '';
+    environment = options.environment ?? nodeEnv;
+    // Default off only in development/test. Staging, preview, qa, production
+    // all opt in automatically. Explicit `enabled` always wins.
+    enabled = options.enabled ?? !['development', 'test'].includes(environment);
   },
 
   log(message: string, context?: Context): void {
