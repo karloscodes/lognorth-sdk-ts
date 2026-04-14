@@ -63,6 +63,42 @@ describe('express middleware', () => {
     assert.strictEqual(body.events[0].message, 'GET /users/999 → 404');
   });
 
+  it('stamps route pattern and handler name when express exposes them', async () => {
+    const mw = middleware();
+    const showUser = function showUser() {};
+    const req = {
+      method: 'GET',
+      path: '/users/42',
+      headers: {},
+      route: { path: '/users/:id', stack: [{ handle: showUser }] },
+    };
+    const res = Object.assign(new EventEmitter(), { statusCode: 200, setHeader: mock.fn() });
+    const next = mock.fn();
+
+    mw(req as any, res as any, next);
+    res.emit('finish');
+    await LogNorth.flush();
+
+    const body = fetchCalls[0].body as { events: { context: Record<string, unknown> }[] };
+    assert.strictEqual(body.events[0].context?.route, '/users/:id');
+    assert.strictEqual(body.events[0].context?.handler, 'showUser');
+  });
+
+  it('omits route/handler when express did not match a route layer', async () => {
+    const mw = middleware();
+    const req = { method: 'GET', path: '/', headers: {} };
+    const res = Object.assign(new EventEmitter(), { statusCode: 200, setHeader: mock.fn() });
+    const next = mock.fn();
+
+    mw(req as any, res as any, next);
+    res.emit('finish');
+    await LogNorth.flush();
+
+    const body = fetchCalls[0].body as { events: { context: Record<string, unknown> }[] };
+    assert.strictEqual(body.events[0].context?.route, undefined);
+    assert.strictEqual(body.events[0].context?.handler, undefined);
+  });
+
   it('uses incoming X-Trace-ID header', async () => {
     const mw = middleware();
     const req = { method: 'POST', path: '/api', headers: { 'x-trace-id': 'incoming-123' } };

@@ -58,11 +58,19 @@ export function middleware(options?: MiddlewareOptions | Logger): RequestHandler
       }
 
       const duration_ms = Date.now() - start;
-      const context = {
+      // req.route is set by express once the matched route layer runs.
+      // handler.name falls back to '' for anonymous handlers, so we skip it
+      // rather than sending an empty string.
+      const routePattern = (req.route as { path?: string } | undefined)?.path;
+      const handlerName = (req.route as { stack?: Array<{ handle?: { name?: string } }> } | undefined)
+        ?.stack?.[0]?.handle?.name || undefined;
+      const context: Record<string, unknown> = {
         method: req.method,
         path: req.path,
         status: res.statusCode,
       };
+      if (routePattern) context.route = routePattern;
+      if (handlerName) context.handler = handlerName;
       const msg = `${req.method} ${req.path} → ${res.statusCode}`;
 
       if (opts.logger) {
