@@ -37,6 +37,18 @@ import { withLogger } from '@karloscodes/lognorth-sdk/next'
 export const GET = withLogger()(handler)
 ```
 
+### Skipping noisy endpoints
+
+Health checks and uptime probes swamp the log feed if you let them
+through. Pass `ignorePaths` to skip them:
+
+```typescript
+app.use(middleware({ ignorePaths: ['/healthz', '/ping', '/up'] }))
+```
+
+No default list — opt in to the ones that match your deployment.
+Matches exact path or `path/…` prefix.
+
 ## With Pino
 
 Keep your existing Pino setup, add LogNorth as a transport:
