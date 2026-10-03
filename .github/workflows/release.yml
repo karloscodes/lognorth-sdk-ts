@@ -20,4 +20,10 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
-      - run: npm publish --access public
+      # An RC (v0.2.0-rc.1) goes to the next dist-tag, so npm install lognorth keeps the stable version.
+      - run: |
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            npm publish --access public --tag next
+          else
+            npm publish --access public
+          fi
