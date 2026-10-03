@@ -74,9 +74,21 @@ app.use(middleware(logger))  // Uses your pino instance
 
 ## How It Works
 
-- `LogNorth.log()` batches events (10 or 5s)
-- `LogNorth.error()` sends immediately
-- Auto-flushes on shutdown
+Logging calls return at once. They never throw into your app.
+
+- `LogNorth.log()` queues the event. The SDK sends when 10 events wait, or 5 seconds after the first one.
+- `LogNorth.error()` queues the event and sends at once.
+- The SDK sends one request at a time. A batch holds at most 500 events and 1 MB.
+- A failed send keeps its events. The SDK retries them first, so events arrive in order.
+- On 429 or 503, the SDK waits for `Retry-After`. On other server or network errors, it waits 1 second, then 2, 4, up to 60.
+- On 401, 403, or 404, the SDK writes one line to stderr and keeps the events. It retries after 60 seconds, then up to every 5 minutes.
+- If the server rejects a batch as too large or invalid, the SDK splits it. It drops a single event the server still rejects.
+- Each request times out after 10 seconds.
+- Each event is trimmed to 64 KB. The SDK marks it with `context.truncated = true`.
+- The queue holds up to 10,000 events or 10 MB. When it is full, the SDK drops the oldest non-error event. Errors go last.
+- After drops, the next successful send adds a `LogNorth client dropped N events` event with the counts.
+- `LogNorth.flush()` tries each queued batch once, within 5 seconds. Events that fail stay queued.
+- On exit, SIGINT, and SIGTERM, the SDK flushes. It drops what is still queued and writes the count to stderr.
 
 ## License
 
