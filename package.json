@@ -1,5 +1,5 @@
 {
-  "name": "@karloscodes/lognorth-sdk",
+  "name": "lognorth",
   "version": "0.1.0",
   "description": "Official JavaScript SDK for LogNorth - self-hosted error tracking and logging",
   "type": "module",
@@ -25,14 +25,21 @@
       "import": "./dist/pino.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist",
+    "!dist/*.test.*",
+    "!dist/test-server.*"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "npx tsx --test src/*.test.ts",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build"
   },
-  "keywords": ["logging", "error-tracking"],
+  "keywords": [
+    "logging",
+    "error-tracking"
+  ],
   "license": "MIT",
   "devDependencies": {
     "@types/express": "^5.0.0",
@@ -46,9 +53,22 @@
     "pino": ">=8"
   },
   "peerDependenciesMeta": {
-    "express": { "optional": true },
-    "hono": { "optional": true },
-    "next": { "optional": true },
-    "pino": { "optional": true }
-  }
+    "express": {
+      "optional": true
+    },
+    "hono": {
+      "optional": true
+    },
+    "next": {
+      "optional": true
+    },
+    "pino": {
+      "optional": true
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/karloscodes/lognorth-sdk-ts.git"
+  },
+  "homepage": "https://lognorth.com/docs/integrations/bun/"
 }

@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "express": "^5.0.0",
-    "@karloscodes/lognorth-sdk": "file:.."
+    "lognorth": "file:.."
   },
   "devDependencies": {
     "tsx": "^4.0.0"

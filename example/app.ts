@@ -1,6 +1,6 @@
 import express from "express";
-import LogNorth from "@karloscodes/lognorth-sdk";
-import { middleware } from "@karloscodes/lognorth-sdk/express";
+import LogNorth from "lognorth";
+import { middleware } from "lognorth/express";
 
 LogNorth.config("http://localhost:8080", process.env.LOGNORTH_API_KEY!);
 

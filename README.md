@@ -7,13 +7,13 @@ Official SDK for [LogNorth](https://lognorth.com) - self-hosted error tracking.
 > **Beta:** Not yet published to npm. Install directly from GitHub:
 
 ```bash
-npm install github:karloscodes/lognorth-sdk-ts
+npm install lognorth
 ```
 
 ## Use
 
 ```typescript
-import LogNorth from '@karloscodes/lognorth-sdk'
+import LogNorth from 'lognorth'
 
 LogNorth.config('https://logs.yoursite.com', 'your-api-key')
 
@@ -25,15 +25,15 @@ LogNorth.error('Checkout failed', err, { order_id: 42 })
 
 ```typescript
 // Express
-import { middleware } from '@karloscodes/lognorth-sdk/express'
+import { middleware } from 'lognorth/express'
 app.use(middleware())
 
 // Hono
-import { middleware } from '@karloscodes/lognorth-sdk/hono'
+import { middleware } from 'lognorth/hono'
 app.use(middleware())
 
 // Next.js
-import { withLogger } from '@karloscodes/lognorth-sdk/next'
+import { withLogger } from 'lognorth/next'
 export const GET = withLogger()(handler)
 ```
 
@@ -55,7 +55,7 @@ Keep your existing Pino setup, add LogNorth as a transport:
 
 ```typescript
 import pino from 'pino'
-import { transport } from '@karloscodes/lognorth-sdk/pino'
+import { transport } from 'lognorth/pino'
 
 LogNorth.config('https://logs.yoursite.com', 'your-api-key')
 
@@ -68,7 +68,7 @@ logger.error({ err }, 'Checkout failed')          // → LogNorth (immediate)
 Middleware with your logger:
 
 ```typescript
-import { middleware } from '@karloscodes/lognorth-sdk/express'
+import { middleware } from 'lognorth/express'
 app.use(middleware(logger))  // Uses your pino instance
 ```
 
