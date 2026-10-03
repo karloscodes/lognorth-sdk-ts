@@ -2,17 +2,19 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-type Reply = { status: number; headers?: Record<string, string> };
+type Reply = { status: number; headers?: Record<string, string>; delayMs?: number };
 
 export type ReceivedEvent = { message: string; trace_id?: string; duration_ms?: number; context?: Record<string, unknown> };
 
-export type Request = { at: number; headers: Record<string, string | string[] | undefined>; events: ReceivedEvent[]; status: number };
+export type Request = { at: number; bytes: number; headers: Record<string, string | string[] | undefined>; events: ReceivedEvent[]; status: number };
 
 export class TestServer {
   url = '';
   port = 0;
   /** Every request, in arrival order, with the status the server answered. */
   requests: Request[] = [];
+  /** Requests received, including ones the client gave up on. */
+  attempts = 0;
   /** Scripted answers, used in order. When empty, the server answers 201. */
   replies: Reply[] = [];
   /** Optional per-request answer. Wins over `replies`. */
@@ -29,11 +31,18 @@ export class TestServer {
       const chunks: Buffer[] = [];
       req.on('data', c => chunks.push(c));
       req.on('end', () => {
-        const events = JSON.parse(Buffer.concat(chunks).toString()).events as ReceivedEvent[];
+        this.attempts++;
+        const body = Buffer.concat(chunks);
+        const events = JSON.parse(body.toString()).events as ReceivedEvent[];
         const reply = this.answer?.(events) ?? this.replies.shift() ?? { status: 201 };
-        this.requests.push({ at: Date.now(), headers: req.headers, events, status: reply.status });
-        res.writeHead(reply.status, { 'Content-Type': 'application/json', ...reply.headers });
-        res.end(JSON.stringify(reply.status < 300 ? { created: events.length, errors: [] } : { error: 'test' }));
+        const respond = () => {
+          if (res.destroyed) return; // the client gave up (timeout)
+          this.requests.push({ at: Date.now(), bytes: body.length, headers: req.headers, events, status: reply.status });
+          res.writeHead(reply.status, { 'Content-Type': 'application/json', ...reply.headers });
+          res.end(JSON.stringify(reply.status < 300 ? { created: events.length, errors: [] } : { error: 'test' }));
+        };
+        if (reply.delayMs) setTimeout(respond, reply.delayMs);
+        else respond();
       });
     });
     await new Promise<void>(resolve => this.server!.listen(port, '127.0.0.1', resolve));
