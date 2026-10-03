@@ -358,6 +358,19 @@ describe('delivery', () => {
       assert.deepStrictEqual(messages(server), ['kept']);
     });
 
+    it('stops a flush at a failing batch, so no later batch overtakes it', async () => {
+      _settings.batchEvents = 1;
+      server.replies = [{ status: 500 }];
+      LogNorth.log('first');
+      LogNorth.log('second');
+
+      await LogNorth.flush();
+      assert.strictEqual(server.stored.length, 0);
+      await LogNorth.flush();
+
+      assert.deepStrictEqual(messages(server), ['first', 'second']);
+    });
+
     for (const how of ['exit', 'SIGTERM'] as const) {
       it(`sends buffered events on ${how}`, async () => {
         const dir = mkdtempSync(join(tmpdir(), 'lognorth-'));

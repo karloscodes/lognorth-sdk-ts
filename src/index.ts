@@ -357,14 +357,14 @@ async function flush(): Promise<void> {
   if (!canSend()) return;
   clearTimer();
   sending = (async () => {
-    const failed: Entry[] = [];
     while (canSend() && Date.now() < deadline) {
       const batch = take();
       const result = await post(batch, Math.max(1, Math.min(_settings.requestTimeoutMs, deadline - Date.now())));
-      if (result === 'retry') failed.push(...batch);
-      else settle(batch, result);
+      // A failed batch goes back to the front and the flush stops: a later
+      // batch must not overtake it, or events arrive out of order.
+      if (result === 'retry') { putBack(batch); break; }
+      settle(batch, result);
     }
-    if (failed.length) putBack(failed);
   })().finally(() => { sending = null; kick(); });
   await settlesBefore(sending, deadline);
 }
