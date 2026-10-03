@@ -1,124 +1,116 @@
-import { describe, it, beforeEach, mock } from 'node:test';
+import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import LogNorth from './index.js';
 import { withTraceID } from './index.js';
+import { TestServer } from './test-server.js';
 
 describe('LogNorth', () => {
-  let fetchCalls: { url: string; body: unknown }[] = [];
+  const server = new TestServer();
+
+  before(() => server.start());
+  after(() => server.stop());
 
   beforeEach(() => {
-    fetchCalls = [];
-    global.fetch = mock.fn(async (url: string, options: { body: string }) => {
-      fetchCalls.push({ url, body: JSON.parse(options.body) });
-      return { ok: true };
-    }) as unknown as typeof fetch;
-
-    LogNorth.config('https://logs.test.com', 'test-key');
+    server.requests = [];
+    LogNorth.config(server.url, 'test-key', { environment: 'production' });
   });
 
   it('batches regular logs until flush', async () => {
     LogNorth.log('Event 1', { user: 123 });
     LogNorth.log('Event 2', { user: 456 });
 
-    assert.strictEqual(fetchCalls.length, 0);
+    assert.strictEqual(server.requests.length, 0);
 
     await LogNorth.flush();
 
-    assert.strictEqual(fetchCalls.length, 1);
-    const body = fetchCalls[0].body as { events: { message: string }[] };
-    assert.strictEqual(body.events.length, 2);
+    assert.strictEqual(server.requests.length, 1);
+    assert.strictEqual(server.requests[0].events.length, 2);
   });
 
   it('sends errors immediately with structured fields in context', async () => {
     const err = new TypeError('Cannot read property');
+
     LogNorth.error('Something failed', err);
 
-    await new Promise(r => setTimeout(r, 10));
-
-    assert.strictEqual(fetchCalls.length, 1);
-    const body = fetchCalls[0].body as { events: { context: Record<string, unknown> }[] };
-    assert.strictEqual(body.events[0].context?.error_class, 'TypeError');
-    assert.strictEqual(body.events[0].context?.error, 'Cannot read property');
-    assert.ok(body.events[0].context?.stack_trace);
+    await server.waitFor(() => server.stored.length === 1);
+    const [event] = server.stored;
+    assert.strictEqual(event.context?.error_class, 'TypeError');
+    assert.strictEqual(event.context?.error, 'Cannot read property');
+    assert.ok(event.context?.stack_trace);
   });
 
   it('includes context in logs', async () => {
     LogNorth.log('User action', { user_id: 42, action: 'login' });
+
     await LogNorth.flush();
 
-    const body = fetchCalls[0].body as { events: { context: Record<string, unknown> }[] };
-    assert.strictEqual(body.events[0].context?.user_id, 42);
+    assert.strictEqual(server.stored[0].context?.user_id, 42);
   });
 
   it('includes context in errors', async () => {
     LogNorth.error('Failed', new Error('oops'), { order_id: 99 });
-    await new Promise(r => setTimeout(r, 10));
 
-    const body = fetchCalls[0].body as { events: { context: Record<string, unknown> }[] };
-    assert.strictEqual(body.events[0].context?.order_id, 99);
-    assert.strictEqual(body.events[0].context?.error, 'oops');
+    await server.waitFor(() => server.stored.length === 1);
+
+    assert.strictEqual(server.stored[0].context?.order_id, 99);
+    assert.strictEqual(server.stored[0].context?.error, 'oops');
   });
 
   it('auto-attaches trace_id from AsyncLocalStorage', async () => {
     withTraceID('abc123', () => {
       LogNorth.log('traced event', { user_id: 1 });
     });
+
     await LogNorth.flush();
 
-    const body = fetchCalls[0].body as { events: { trace_id?: string }[] };
-    assert.strictEqual(body.events[0].trace_id, 'abc123');
+    assert.strictEqual(server.stored[0].trace_id, 'abc123');
   });
 
   it('sends auth header', async () => {
-    let capturedHeaders: Record<string, string> = {};
-    global.fetch = mock.fn(async (_url: string, options: { headers: Record<string, string> }) => {
-      capturedHeaders = options.headers;
-      return { ok: true };
-    }) as unknown as typeof fetch;
-
     LogNorth.log('Test');
+
     await LogNorth.flush();
 
-    assert.strictEqual(capturedHeaders['Authorization'], 'Bearer test-key');
+    assert.strictEqual(server.requests[0].headers.authorization, 'Bearer test-key');
+    assert.strictEqual(server.requests[0].headers['content-type'], 'application/json');
   });
 
   it('stamps environment on every event', async () => {
-    LogNorth.config('https://logs.test.com', 'test-key', { environment: 'staging' });
+    LogNorth.config(server.url, 'test-key', { environment: 'staging' });
 
     LogNorth.log('hello');
     await LogNorth.flush();
-    const logBody = fetchCalls[0].body as { events: { context?: Record<string, unknown> }[] };
-    assert.strictEqual(logBody.events[0].context?.environment, 'staging');
-
-    fetchCalls = [];
     LogNorth.error('crash', new Error('boom'));
-    await new Promise(r => setTimeout(r, 10));
-    const errBody = fetchCalls[0].body as { events: { context?: Record<string, unknown> }[] };
-    assert.strictEqual(errBody.events[0].context?.environment, 'staging');
+    await server.waitFor(() => server.stored.length === 2);
+
+    assert.strictEqual(server.stored[0].context?.environment, 'staging');
+    assert.strictEqual(server.stored[1].context?.environment, 'staging');
   });
 
   it('skips sending in test/development by default and sends in staging/production/preview', async () => {
     for (const env of ['test', 'development']) {
-      fetchCalls = [];
-      LogNorth.config('https://logs.test.com', 'test-key', { environment: env });
+      server.requests = [];
+      LogNorth.config(server.url, 'test-key', { environment: env });
       LogNorth.log('dropped');
       await LogNorth.flush();
-      assert.strictEqual(fetchCalls.length, 0, `expected no send in ${env}`);
+      assert.strictEqual(server.requests.length, 0, `expected no send in ${env}`);
     }
 
     for (const env of ['staging', 'preview', 'qa', 'production']) {
-      fetchCalls = [];
-      LogNorth.config('https://logs.test.com', 'test-key', { environment: env });
+      server.requests = [];
+      LogNorth.config(server.url, 'test-key', { environment: env });
       LogNorth.log('sent');
       await LogNorth.flush();
-      assert.strictEqual(fetchCalls.length, 1, `expected send in ${env}`);
+      assert.strictEqual(server.requests.length, 1, `expected send in ${env}`);
     }
   });
 
   it('explicit enabled overrides the env-based default', async () => {
-    LogNorth.config('https://logs.test.com', 'test-key', { environment: 'development', enabled: true });
+    LogNorth.config(server.url, 'test-key', { environment: 'development', enabled: true });
+
     LogNorth.log('forced on');
     await LogNorth.flush();
-    assert.strictEqual(fetchCalls.length, 1);
+
+    assert.strictEqual(server.requests.length, 1);
   });
 });

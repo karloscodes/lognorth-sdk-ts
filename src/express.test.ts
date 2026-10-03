@@ -1,20 +1,19 @@
-import { describe, it, beforeEach, mock } from 'node:test';
+import { describe, it, before, after, beforeEach, mock } from 'node:test';
 import assert from 'node:assert';
 import { EventEmitter } from 'node:events';
 import LogNorth from './index.js';
 import { middleware } from './express.js';
+import { TestServer } from './test-server.js';
 
 describe('express middleware', () => {
-  let fetchCalls: { body: unknown }[] = [];
+  const server = new TestServer();
+
+  before(() => server.start());
+  after(() => server.stop());
 
   beforeEach(() => {
-    fetchCalls = [];
-    global.fetch = mock.fn(async (_url: string, options: { body: string }) => {
-      fetchCalls.push({ body: JSON.parse(options.body) });
-      return { ok: true };
-    }) as unknown as typeof fetch;
-
-    LogNorth.config('https://test.com', 'test');
+    server.requests = [];
+    LogNorth.config(server.url, 'test', { environment: 'production' });
   });
 
   it('logs request on response finish', async () => {
@@ -27,12 +26,12 @@ describe('express middleware', () => {
     res.emit('finish');
     await LogNorth.flush();
 
-    const body = fetchCalls[0].body as { events: { message: string; trace_id?: string; duration_ms?: number; context: Record<string, unknown> }[] };
-    assert.strictEqual(body.events[0].message, 'GET /users → 200');
-    assert.ok(body.events[0].trace_id, 'expected trace_id on event');
-    assert.strictEqual(typeof body.events[0].duration_ms, 'number');
+    const [event] = server.stored;
+    assert.strictEqual(event.message, 'GET /users → 200');
+    assert.ok(event.trace_id, 'expected trace_id on event');
+    assert.strictEqual(typeof event.duration_ms, 'number');
     // duration_ms should NOT be in context
-    assert.strictEqual(body.events[0].context?.duration_ms, undefined);
+    assert.strictEqual(event.context?.duration_ms, undefined);
   });
 
   it('skips route miss 404', async () => {
@@ -45,7 +44,7 @@ describe('express middleware', () => {
     res.emit('finish');
     await LogNorth.flush();
 
-    assert.strictEqual(fetchCalls.length, 0);
+    assert.strictEqual(server.requests.length, 0);
   });
 
   it('tracks controller 404 when route matched', async () => {
@@ -58,9 +57,9 @@ describe('express middleware', () => {
     res.emit('finish');
     await LogNorth.flush();
 
-    assert.strictEqual(fetchCalls.length, 1);
-    const body = fetchCalls[0].body as { events: { message: string }[] };
-    assert.strictEqual(body.events[0].message, 'GET /users/999 → 404');
+    assert.strictEqual(server.requests.length, 1);
+    const [event] = server.stored;
+    assert.strictEqual(event.message, 'GET /users/999 → 404');
   });
 
   it('stamps route pattern and handler name when express exposes them', async () => {
@@ -79,9 +78,9 @@ describe('express middleware', () => {
     res.emit('finish');
     await LogNorth.flush();
 
-    const body = fetchCalls[0].body as { events: { context: Record<string, unknown> }[] };
-    assert.strictEqual(body.events[0].context?.route, '/users/:id');
-    assert.strictEqual(body.events[0].context?.handler, 'showUser');
+    const [event] = server.stored;
+    assert.strictEqual(event.context?.route, '/users/:id');
+    assert.strictEqual(event.context?.handler, 'showUser');
   });
 
   it('omits route/handler when express did not match a route layer', async () => {
@@ -94,9 +93,9 @@ describe('express middleware', () => {
     res.emit('finish');
     await LogNorth.flush();
 
-    const body = fetchCalls[0].body as { events: { context: Record<string, unknown> }[] };
-    assert.strictEqual(body.events[0].context?.route, undefined);
-    assert.strictEqual(body.events[0].context?.handler, undefined);
+    const [event] = server.stored;
+    assert.strictEqual(event.context?.route, undefined);
+    assert.strictEqual(event.context?.handler, undefined);
   });
 
   it('uses incoming X-Trace-ID header', async () => {
@@ -109,8 +108,8 @@ describe('express middleware', () => {
     res.emit('finish');
     await LogNorth.flush();
 
-    const body = fetchCalls[0].body as { events: { trace_id?: string }[] };
-    assert.strictEqual(body.events[0].trace_id, 'incoming-123');
+    const [event] = server.stored;
+    assert.strictEqual(event.trace_id, 'incoming-123');
     assert.deepStrictEqual(res.setHeader.mock.calls[0].arguments, ['X-Trace-ID', 'incoming-123']);
   });
 });
