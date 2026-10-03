@@ -95,6 +95,23 @@ describe('delivery', () => {
       assert.ok(server.requests[1].at - server.requests[0].at >= 950, 'waited Retry-After');
     });
 
+    it('does not grow the backoff on Retry-After, and the retry takes a full batch', async () => {
+      server.replies = [
+        { status: 503, headers: { 'Retry-After': '1' } },
+        { status: 503, headers: { 'Retry-After': '1' } },
+        { status: 500 },
+      ];
+
+      logMany(10);
+      await server.waitFor(() => server.requests.length === 1);
+      logMany(30, 'later');
+
+      await server.waitFor(() => server.stored.length === 40, 5000);
+      assert.deepStrictEqual(server.requests.map(r => r.events.length), [10, 40, 40, 40]);
+      const gap = server.requests[3].at - server.requests[2].at;
+      assert.ok(gap < 50, `the wait after the 500 is the first backoff, got ${gap}ms`);
+    });
+
     it('waits the backoff on 503 without Retry-After', async () => {
       server.replies = [{ status: 503 }];
 

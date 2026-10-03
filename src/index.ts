@@ -253,8 +253,13 @@ function outcome(status: number, retryAfter: string | null, size: number): Outco
   if (status === 429 || status === 503) {
     markFailing(`status ${status}`);
     const seconds = retryAfter && /^\d+$/.test(retryAfter.trim()) ? parseInt(retryAfter, 10) : null;
-    wait(seconds === null ? backoff : Math.min(Math.max(seconds, 1), 300) * 1000);
-    backoff = Math.min(backoff * 2, _settings.backoffMaxMs);
+    if (seconds !== null) {
+      // The server said when; the backoff stays for failures that do not say.
+      wait(Math.min(Math.max(seconds, 1), 300) * 1000);
+    } else {
+      wait(backoff);
+      backoff = Math.min(backoff * 2, _settings.backoffMaxMs);
+    }
     return 'retry';
   }
 
@@ -290,8 +295,9 @@ async function post(batch: Entry[], timeoutMs: number): Promise<Outcome> {
 
 function settle(batch: Entry[], result: Outcome): void {
   if (result === 'retry') {
+    // The next send takes a full batch again; a refused batch splits again.
+    splits = [];
     putBack(batch);
-    splits.unshift(batch.length);
   } else if (result === 'split') {
     putBack(batch);
     splits.unshift(Math.ceil(batch.length / 2), Math.floor(batch.length / 2));
