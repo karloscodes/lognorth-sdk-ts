@@ -53,6 +53,8 @@ Errors also carry the release. The SDK reads `LOGNORTH_RELEASE`, `GIT_SHA`, `KAM
 LogNorth.config(url, key, { release: process.env.APP_VERSION })
 ```
 
+When the release is set, the SDK logs `Release <version> started` once at startup. LogNorth marks each release's first start on its charts.
+
 A failed request (5xx) also carries its user agent, so you can tell a bot from a browser.
 
 ### Skipping noisy endpoints

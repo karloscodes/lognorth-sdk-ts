@@ -441,6 +441,7 @@ function _reset(): void {
   failing = false;
   misconfigured = false;
   release = '';
+  announced = '';
 }
 
 // Internal: used by middleware to set duration_ms and trace_id on events
@@ -498,6 +499,18 @@ function releaseFromEnv(): string {
   return '';
 }
 
+// The release this process last said it started.
+let announced = '';
+
+// Logs "Release <version> started" once per release, when the client is
+// configured. LogNorth takes the first start of a release as its deploy time
+// and marks it on its charts.
+function announceRelease(): void {
+  if (!release || release === announced || !enabled) return;
+  announced = release;
+  _log(`Release ${release} started`, { release }, '');
+}
+
 interface ConfigOptions {
   /** Environment label stamped on every event (e.g. "production", "staging"). Defaults to NODE_ENV. */
   environment?: string;
@@ -517,6 +530,7 @@ const LogNorth = {
     // Default off only in development/test. Staging, preview, qa, production
     // all opt in automatically. Explicit `enabled` always wins.
     enabled = options.enabled ?? !['development', 'test'].includes(environment);
+    announceRelease();
     kick();
   },
 

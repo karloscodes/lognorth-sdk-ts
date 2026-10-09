@@ -16,6 +16,9 @@ describe('request context', () => {
     LogNorth.config(server.url, 'test', { environment: 'production', release: 'a1b2c3d' });
   });
 
+  // What the server stored, without the "Release … started" events.
+  const stored = () => server.stored.filter(e => !/^Release .+ started$/.test(e.message));
+
   // Runs one request through the Express middleware. The handler runs inside
   // the request, as next() does in an app.
   function request(path: string, status: number, handler: () => void = () => {}) {
@@ -34,7 +37,7 @@ describe('request context', () => {
 
     await LogNorth.flush();
 
-    const [error, req] = server.stored;
+    const [error, req] = stored();
     assert.strictEqual(error.context?.user, '42');
     assert.strictEqual(req.context?.user, '42');
   });
@@ -45,7 +48,7 @@ describe('request context', () => {
 
     await LogNorth.flush();
 
-    const [ok, broken] = server.stored;
+    const [ok, broken] = stored();
     assert.strictEqual(ok.context?.user_agent, undefined);
     assert.strictEqual(broken.context?.user_agent, 'Mozilla/5.0');
   });
@@ -56,7 +59,7 @@ describe('request context', () => {
 
     await LogNorth.flush();
 
-    const [log, error] = server.stored;
+    const [log, error] = stored();
     assert.strictEqual(log.context?.release, undefined);
     assert.strictEqual(error.context?.release, 'a1b2c3d');
   });
@@ -69,7 +72,18 @@ describe('request context', () => {
     await LogNorth.flush();
     delete process.env.KAMAL_VERSION;
 
-    assert.strictEqual(server.stored[0].context?.release, 'f00ba44');
+    assert.strictEqual(stored()[0].context?.release, 'f00ba44');
+  });
+
+  it('says once that the release started', async () => {
+    LogNorth.config(server.url, 'test', { environment: 'production', release: 'c0ffee1' });
+    LogNorth.config(server.url, 'test', { environment: 'production', release: 'c0ffee1' });
+
+    await LogNorth.flush();
+
+    const starts = server.stored.filter(e => e.message === 'Release c0ffee1 started');
+    assert.strictEqual(starts.length, 1);
+    assert.strictEqual(starts[0].context?.release, 'c0ffee1');
   });
 
   it('ignores setUser outside a request', async () => {
@@ -78,6 +92,6 @@ describe('request context', () => {
 
     await LogNorth.flush();
 
-    assert.strictEqual(server.stored[0].context?.user, undefined);
+    assert.strictEqual(stored()[0].context?.user, undefined);
   });
 });
