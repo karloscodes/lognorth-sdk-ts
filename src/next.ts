@@ -1,4 +1,5 @@
-import { withTraceID, generateTraceID, _log, _error } from './index.js';
+import { withRequest, generateTraceID, _requestFields, _log, _error } from './index.js';
+import type { RequestState } from './index.js';
 
 type Handler = (req: Request) => Promise<Response> | Response;
 
@@ -50,14 +51,16 @@ export function withLogger(options?: WithLoggerOptions | Logger) {
       const startTime = new Date();
       const start = startTime.getTime();
       const traceID = req.headers.get('x-trace-id') || generateTraceID();
+      const state: RequestState = { traceID };
 
       try {
-        const res = await withTraceID(traceID, () => handler(req));
+        const res = await withRequest(state, () => handler(req));
         const duration_ms = Date.now() - start;
         const context = {
           method: req.method,
           path: url.pathname,
           status: res.status,
+          ..._requestFields(state, res.status, req.headers.get('user-agent')),
         };
         const msg = `${req.method} ${url.pathname} → ${res.status}`;
 
@@ -75,6 +78,7 @@ export function withLogger(options?: WithLoggerOptions | Logger) {
         const context = {
           method: req.method,
           path: url.pathname,
+          ..._requestFields(state, undefined, req.headers.get('user-agent')),
         };
         const msg = `${req.method} ${url.pathname} → error`;
 

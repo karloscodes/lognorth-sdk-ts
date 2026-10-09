@@ -25,14 +25,38 @@ function generateTraceID(): string {
   return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 }
 
-const traceStore = new AsyncLocalStorage<string>();
+// What the SDK knows about the request in flight: its trace ID, and the user
+// a handler named with LogNorth.setUser. Middleware reads it when the request ends.
+type RequestState = { traceID: string; user?: string };
+
+const requestStore = new AsyncLocalStorage<RequestState>();
+
+function withRequest<T>(state: RequestState, fn: () => T): T {
+  return requestStore.run(state, fn);
+}
 
 function withTraceID<T>(traceID: string, fn: () => T): T {
-  return traceStore.run(traceID, fn);
+  return withRequest({ traceID }, fn);
 }
 
 function getTraceID(): string | undefined {
-  return traceStore.getStore();
+  return requestStore.getStore()?.traceID;
+}
+
+// The fields middleware adds to a request event: the user, and the user agent
+// of a failed request. Only failed requests carry the user agent, to keep
+// every other event small.
+function _requestFields(state: RequestState, status: number | undefined, userAgent: string | null | undefined): Context {
+  const fields: Context = {};
+  if (state.user) fields.user = state.user;
+  if ((status === undefined || status >= 500) && userAgent) fields.user_agent = userAgent;
+  return fields;
+}
+
+function withUser(context: Context | undefined): Context | undefined {
+  const user = requestStore.getStore()?.user;
+  if (!user || context?.user !== undefined) return context;
+  return { ...context, user };
 }
 
 // Internal settings. Tests shorten the waits; apps never change them.
@@ -56,7 +80,7 @@ const _settings = {
 };
 
 // Context keys kept when an event is still too big after trimming its strings.
-const ESSENTIAL_KEYS = ['error', 'error_class', 'error_file', 'error_line', 'method', 'path', 'status', 'environment'];
+const ESSENTIAL_KEYS = ['error', 'error_class', 'error_file', 'error_line', 'method', 'path', 'status', 'environment', 'release', 'user'];
 
 // A queued event, with the byte length of its JSON measured once.
 type Entry = { event: Event; size: number; isError: boolean };
@@ -66,6 +90,7 @@ type Outcome = 'sent' | 'retry' | 'split' | 'drop';
 let apiKey = '';
 let endpoint = '';
 let environment = '';
+let release = '';
 let enabled = true;
 let queue: Entry[] = [];
 let queueBytes = 0;
@@ -171,7 +196,16 @@ function due(): boolean {
     || queueBytes > _settings.maxBytes / 2;
 }
 
+// Errors carry the release: that is where it answers which deploy broke
+// something. Other events stay small.
+function stampRelease(event: Event): void {
+  if (release && isErrorEvent(event.context) && event.context?.release === undefined) {
+    event.context = { ...event.context, release };
+  }
+}
+
 function enqueue(event: Event): void {
+  stampRelease(event);
   let entry: Entry;
   try {
     entry = toEntry(event);
@@ -406,6 +440,7 @@ function _reset(): void {
   urgent = false;
   failing = false;
   misconfigured = false;
+  release = '';
 }
 
 // Internal: used by middleware to set duration_ms and trace_id on events
@@ -448,11 +483,28 @@ function _error(message: string, err: Error, context: Context | undefined, trace
   enqueue(event);
 }
 
+// Where deploy tools put the version that runs. The first one set wins.
+const RELEASE_ENV = [
+  'LOGNORTH_RELEASE', 'GIT_SHA', 'GIT_COMMIT', 'SOURCE_COMMIT', 'KAMAL_VERSION',
+  'RENDER_GIT_COMMIT', 'HEROKU_SLUG_COMMIT', 'SOURCE_VERSION', 'RAILWAY_GIT_COMMIT_SHA', 'VERCEL_GIT_COMMIT_SHA',
+];
+
+function releaseFromEnv(): string {
+  if (typeof process === 'undefined') return '';
+  for (const key of RELEASE_ENV) {
+    const value = process.env?.[key]?.trim();
+    if (value) return value;
+  }
+  return '';
+}
+
 interface ConfigOptions {
   /** Environment label stamped on every event (e.g. "production", "staging"). Defaults to NODE_ENV. */
   environment?: string;
   /** Override the auto-disable in test/development. */
   enabled?: boolean;
+  /** The version that runs, such as a git SHA. Errors carry it. Defaults to LOGNORTH_RELEASE, GIT_SHA, KAMAL_VERSION, or a host's commit variable. */
+  release?: string;
 }
 
 const LogNorth = {
@@ -461,6 +513,7 @@ const LogNorth = {
     apiKey = key;
     const nodeEnv = typeof process !== 'undefined' ? (process.env?.NODE_ENV ?? '') : '';
     environment = options.environment ?? nodeEnv;
+    release = options.release ?? releaseFromEnv();
     // Default off only in development/test. Staging, preview, qa, production
     // all opt in automatically. Explicit `enabled` always wins.
     enabled = options.enabled ?? !['development', 'test'].includes(environment);
@@ -468,15 +521,26 @@ const LogNorth = {
   },
 
   log(message: string, context?: Context): void {
-    _log(message, context, getTraceID() ?? '');
+    _log(message, withUser(context), getTraceID() ?? '');
   },
 
   error(message: string, err: Error, context?: Context): void {
-    _error(message, err, context, getTraceID() ?? '');
+    _error(message, err, withUser(context), getTraceID() ?? '');
+  },
+
+  /**
+   * Names the user of the request in flight: an ID, not an email. The request
+   * event carries it, and so does every log and error in that request, so an
+   * issue shows how many users it hit. Outside a LogNorth middleware it does nothing.
+   */
+  setUser(id: string | number): void {
+    const state = requestStore.getStore();
+    if (state) state.user = String(id);
   },
 
   flush,
 };
 
 export default LogNorth;
-export { LogNorth, withTraceID, generateTraceID, getTraceID, _log, _error, _settings, _reset };
+export { LogNorth, withTraceID, withRequest, generateTraceID, getTraceID, _requestFields, _log, _error, _settings, _reset };
+export type { RequestState };

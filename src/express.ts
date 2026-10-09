@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
-import { withTraceID, generateTraceID, _log } from './index.js';
+import { withRequest, generateTraceID, _requestFields, _log } from './index.js';
+import type { RequestState } from './index.js';
 
 interface Logger {
   info(msg: string, ...args: unknown[]): void;
@@ -49,6 +50,7 @@ export function middleware(options?: MiddlewareOptions | Logger): RequestHandler
     const startTime = new Date();
     const start = startTime.getTime();
     const traceID = (req.headers?.['x-trace-id'] as string) || generateTraceID();
+    const state: RequestState = { traceID };
     res.setHeader?.('X-Trace-ID', traceID);
 
     res.on('finish', () => {
@@ -71,6 +73,7 @@ export function middleware(options?: MiddlewareOptions | Logger): RequestHandler
       };
       if (routePattern) context.route = routePattern;
       if (handlerName) context.handler = handlerName;
+      Object.assign(context, _requestFields(state, res.statusCode, req.headers?.['user-agent']));
       const msg = `${req.method} ${req.path} → ${res.statusCode}`;
 
       if (opts.logger) {
@@ -80,6 +83,6 @@ export function middleware(options?: MiddlewareOptions | Logger): RequestHandler
       }
     });
 
-    withTraceID(traceID, () => next());
+    withRequest(state, () => next());
   };
 }
