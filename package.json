@@ -43,7 +43,7 @@
   "license": "MIT",
   "devDependencies": {
     "@types/express": "^5.0.0",
-    "@types/node": "^22.0.0",
+    "@types/node": "^26.6.5",
     "typescript": "^5.0.0"
   },
   "peerDependencies": {
