@@ -1,7 +1,14 @@
+# A tag v* publishes the package to npm with trusted publishing, after the
+# tests. A tag with a hyphen (v0.2.0-rc.1) is a pre-release: it goes to the
+# next dist-tag. The same shape as lognorth-sdk-rails.
 name: Release
 on:
   push:
     tags: ['v*']
+
+# Read only by default: only the job that publishes can write.
+permissions:
+  contents: read
 
 jobs:
   publish:
@@ -11,8 +18,8 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
