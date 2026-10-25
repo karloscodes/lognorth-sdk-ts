@@ -1,6 +1,6 @@
 {
   "name": "lognorth",
-  "version": "0.2.0",
+  "version": "0.2.1-rc.1",
   "description": "Official JavaScript SDK for LogNorth - self-hosted error tracking and logging",
   "type": "module",
   "exports": {
