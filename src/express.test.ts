@@ -83,6 +83,50 @@ describe('express middleware', () => {
     assert.strictEqual(event.context?.handler, 'showUser');
   });
 
+  // What Express 4 and 5 hold when the response finishes inside a router
+  // mounted at /api/users: the path and the route are relative to it.
+  it('sends the full path and route of a request inside a router', async () => {
+    const mw = middleware();
+    const req = { method: 'GET', baseUrl: '/api/users', path: '/42', headers: {}, route: { path: '/:id' } };
+    const res = Object.assign(new EventEmitter(), { statusCode: 200, setHeader: mock.fn() });
+
+    mw(req as any, res as any, mock.fn());
+    res.emit('finish');
+    await LogNorth.flush();
+
+    const [event] = server.stored;
+    assert.strictEqual(event.message, 'GET /api/users/42 → 200');
+    assert.strictEqual(event.context?.path, '/api/users/42');
+    assert.strictEqual(event.context?.route, '/api/users/:id');
+  });
+
+  it('sends the root of a router without a trailing slash', async () => {
+    const mw = middleware();
+    const req = { method: 'GET', baseUrl: '/api/users', path: '/', headers: {}, route: { path: '/' } };
+    const res = Object.assign(new EventEmitter(), { statusCode: 200, setHeader: mock.fn() });
+
+    mw(req as any, res as any, mock.fn());
+    res.emit('finish');
+    await LogNorth.flush();
+
+    const [event] = server.stored;
+    assert.strictEqual(event.context?.path, '/api/users');
+    assert.strictEqual(event.context?.route, '/api/users');
+  });
+
+  it('sends no route when the route is a regular expression', async () => {
+    const mw = middleware();
+    const req = { method: 'GET', path: '/files/a.txt', headers: {}, route: { path: /^\/files\/.*/ } };
+    const res = Object.assign(new EventEmitter(), { statusCode: 200, setHeader: mock.fn() });
+
+    mw(req as any, res as any, mock.fn());
+    res.emit('finish');
+    await LogNorth.flush();
+
+    const [event] = server.stored;
+    assert.strictEqual(event.context?.route, undefined);
+  });
+
   it('omits route/handler when express did not match a route layer', async () => {
     const mw = middleware();
     const req = { method: 'GET', path: '/', headers: {} };

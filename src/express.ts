@@ -16,6 +16,14 @@ interface MiddlewareOptions {
   logger?: Logger;
 }
 
+// Inside a router, Express leaves req.path and req.route relative to it
+// (/42 and /:id under /api/users) once the route answers, so put the
+// router's base back in front.
+function underRouter(baseUrl: string | undefined, path: string): string {
+  if (!baseUrl) return path;
+  return path === '/' ? baseUrl : baseUrl + path;
+}
+
 function isIgnoredPath(path: string, ignorePaths?: string[]): boolean {
   if (!ignorePaths?.length) return false;
   return ignorePaths.some(p => path === p || path.startsWith(p + '/'));
@@ -63,18 +71,19 @@ export function middleware(options?: MiddlewareOptions | Logger): RequestHandler
       // req.route is set by express once the matched route layer runs.
       // handler.name falls back to '' for anonymous handlers, so we skip it
       // rather than sending an empty string.
-      const routePattern = (req.route as { path?: string } | undefined)?.path;
+      const routePath = (req.route as { path?: unknown } | undefined)?.path;
       const handlerName = (req.route as { stack?: Array<{ handle?: { name?: string } }> } | undefined)
         ?.stack?.[0]?.handle?.name || undefined;
+      const path = underRouter(req.baseUrl, req.path);
       const context: Record<string, unknown> = {
         method: req.method,
-        path: req.path,
+        path,
         status: res.statusCode,
       };
-      if (routePattern) context.route = routePattern;
+      if (typeof routePath === 'string') context.route = underRouter(req.baseUrl, routePath);
       if (handlerName) context.handler = handlerName;
       Object.assign(context, _requestFields(state, res.statusCode, req.headers?.['user-agent']));
-      const msg = `${req.method} ${req.path} → ${res.statusCode}`;
+      const msg = `${req.method} ${path} → ${res.statusCode}`;
 
       if (opts.logger) {
         opts.logger.info({ ...context, duration_ms, trace_id: traceID }, msg);
